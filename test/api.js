@@ -621,6 +621,18 @@ test('test file with exclusive tests causes non-exclusive tests in other files t
 		});
 });
 
+test('test files can be forced to run in exclusive mode', function (t) {
+	t.plan(4);
+
+	var api = new Api();
+	return api.run([path.join(__dirname, 'fixture/es2015.js')], true).then(function () {
+		t.ok(api.hasExclusive);
+		t.is(api.testCount, 0);
+		t.is(api.passCount, 0);
+		t.is(api.failCount, 0);
+	});
+});
+
 test('resets state before running', function (t) {
 	t.plan(2);
 
@@ -664,6 +676,26 @@ test('emits dependencies for test files', function (t) {
 	// The test files are designed to cause errors so ignore them here.
 	api.on('error', function () {});
 	result.catch(function () {});
+});
+
+test('emits stats for test files', function (t) {
+	t.plan(2);
+
+	var api = new Api();
+	api.on('stats', function (stats) {
+		if (stats.file === path.normalize('test/fixture/exclusive.js')) {
+			t.is(stats.hasExclusive, true);
+		} else if (stats.file === path.normalize('test/fixture/generators.js')) {
+			t.is(stats.hasExclusive, false);
+		} else {
+			t.ok(false);
+		}
+	});
+
+	return api.run([
+		'test/fixture/exclusive.js',
+		'test/fixture/generators.js'
+	]);
 });
 
 test('verify test count', function (t) {

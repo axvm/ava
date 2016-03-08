@@ -884,4 +884,105 @@ group('chokidar is installed', function (beforeEach, test, group) {
 			});
 		});
 	});
+
+	group('.only is sticky', function (beforeEach, test) {
+		var apiEmitter;
+		beforeEach(function () {
+			apiEmitter = new EventEmitter();
+			api.on = function (event, fn) {
+				apiEmitter.on(event, fn);
+			};
+		});
+
+		var emitStats = function (file, hasExclusive) {
+			apiEmitter.emit('stats', {file: file, hasExclusive: hasExclusive});
+		};
+
+		var t1 = path.join('test', '1.js');
+		var t2 = path.join('test', '2.js');
+		var t3 = path.join('test', '3.js');
+		var t4 = path.join('test', '4.js');
+
+		var seed = function () {
+			var done;
+			api.run.returns(new Promise(function (resolve) {
+				done = resolve;
+			}));
+
+			var watcher = start();
+			emitStats(t1, true);
+			emitStats(t2, true);
+			emitStats(t3, false);
+			emitStats(t4, false);
+
+			done();
+			api.run.returns(new Promise(function () {}));
+			return watcher;
+		};
+
+		test('changed test files (none of which previously contained .only) are run in exclusive mode', function (t) {
+			t.plan(2);
+			seed();
+
+			change(t3);
+			change(t4);
+			return debounce(2).then(function () {
+				t.ok(api.run.calledTwice);
+				t.same(api.run.secondCall.args, [[t3, t4], true]);
+			});
+		});
+
+		test('changed test files (comprising some, but not all, files that previously contained .only) are run in exclusive mode', function (t) {
+			t.plan(2);
+			seed();
+
+			change(t1);
+			change(t4);
+			return debounce(2).then(function () {
+				t.ok(api.run.calledTwice);
+				t.same(api.run.secondCall.args, [[t1, t4], true]);
+			});
+		});
+
+		test('changed test files (comprising all files that previously contained .only) are run in regular mode', function (t) {
+			t.plan(2);
+			seed();
+
+			change(t1);
+			change(t2);
+			return debounce(2).then(function () {
+				t.ok(api.run.calledTwice);
+				t.same(api.run.secondCall.args, [[t1, t2]]);
+			});
+		});
+
+		test('once no test files contain .only, further changed test files are run in regular mode', function (t) {
+			t.plan(2);
+			seed();
+
+			emitStats(t1, false);
+			emitStats(t2, false);
+
+			change(t3);
+			change(t4);
+			return debounce(2).then(function () {
+				t.ok(api.run.calledTwice);
+				t.same(api.run.secondCall.args, [[t3, t4]]);
+			});
+		});
+
+		test('once test files containing .only are removed, further changed test files are runi n regular mode', function (t) {
+			t.plan(2);
+			seed();
+
+			unlink(t1);
+			unlink(t2);
+			change(t3);
+			change(t4);
+			return debounce(4).then(function () {
+				t.ok(api.run.calledTwice);
+				t.same(api.run.secondCall.args, [[t3, t4]]);
+			});
+		});
+	});
 });
